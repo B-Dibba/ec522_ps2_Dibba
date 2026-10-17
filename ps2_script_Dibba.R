@@ -130,5 +130,16 @@ ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
   ) +
   theme_minimal()
 
+#5.2 Produce Individual Line Plots using facet_wrap()
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  facet_wrap(~ region) +
+  labs(
+    title = "Monthly Unemployment Rates by Region (1976–Present)",
+    x     = "Date",
+    y     = "Unemployment Rate (%)",
+    color = "Region"
+  ) +
+  theme_minimal()
 
 

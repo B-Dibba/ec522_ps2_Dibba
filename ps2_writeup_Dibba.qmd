@@ -1,0 +1,258 @@
+---
+title: "Problem Set 2"
+author: "Baboucarr Dibba"
+date: today
+format:
+  html:
+    toc: true
+    embed-resources: true
+---
+
+**GitHub repo:** <https://github.com/B-Dibba/ec522_ps2_Dibba>
+
+## 1. Data
+
+This analysis uses monthly, seasonally adjusted unemployment rate data for five U.S. regions, sourced from the \[Federal Reserve Economic Data (FRED)\](https://fred.stlouisfed.org/) database, maintained by the Federal Reserve Bank of St. Louis. The data were pulled directly into R using the \`tq_get()\` function from the \`tidyquant\` package and span from January 1976 through August (the most recently available month).
+
+The code chunk below loads the saved data from the local \`.rds\` file and displays the first six rows so the reader can inspect its structure: \
+
+```{R}
+#| echo: false 
+#| message: false
+#| warning: false
+library(tidyquant) 
+library(tidyverse)
+
+unemp_raw <- read_rds("data/unemp_raw.rds")
+
+head(unemp_raw)
+
+```
+
+## 2. Wrangling
+
+The raw data are processed through several steps. The \`price\` column is renamed to \`unemployment_rate\` and a readable \`region\` label is added for each FRED series code. A missing October 2025 value due to a government shutdown is imputed using each region's September 2025 value. A month-over-month change column is then computed within each region. Summary statistics (mean, min, max) are calculated for both the full sample (January 1976–August 2026) and a recent sub-sample (January 2015–August 2026). Finally, the five largest monthly increases and decreases are identified, excluding all 2020 observations to set aside the COVID-19 shock.
+
+```{R}
+#| echo: false
+#| message: false
+#| warning: false
+library(knitr)
+
+# 4.1 Rename and label regions
+unemp <- unemp_raw |>
+  rename(unemployment_rate = price) |>
+  mutate(
+    region = case_when(
+      symbol == "UNRATE" ~ "United States",
+      symbol == "ORUR"   ~ "Oregon",
+      symbol == "CAUR"   ~ "California",
+      symbol == "TXUR"   ~ "Texas",
+      symbol == "NYUR"   ~ "New York"
+    )
+  )
+
+# 4.2a Impute missing October 2025
+unemp <- unemp |>
+  arrange(region, date) |>
+  group_by(region) |>
+  mutate(
+    unemployment_rate = replace(
+      unemployment_rate,
+      date == as.Date("2025-10-01"),
+      unemployment_rate[date == as.Date("2025-09-01")]
+    )
+  ) |>
+  ungroup()
+
+# 4.2b Add month-over-month change
+unemp <- unemp |>
+  arrange(region, date) |>
+  group_by(region) |>
+  mutate(
+    unemployment_rate_change = unemployment_rate - lag(unemployment_rate)
+  ) |>
+  ungroup()
+
+# 4.2c Recent sample (January 2015 onward)
+unemp_recent <- unemp |>
+  filter(date >= as.Date("2015-01-01"))
+
+# 4.2d Summary stats – full sample
+unemp_summary <- unemp |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
+# 4.2e Summary stats – recent sample
+unemp_recent_summary <- unemp_recent |>
+  group_by(region) |>
+  summarize(
+    mean_rate = mean(unemployment_rate, na.rm = TRUE),
+    min_rate  = min(unemployment_rate,  na.rm = TRUE),
+    max_rate  = max(unemployment_rate,  na.rm = TRUE)
+  )
+
+# 4.4 Extremes excluding 2020
+unemp_no_covid <- unemp |>
+  filter(year(date) != 2020)
+
+unemp_top_increases_no_covid <- unemp_no_covid |>
+  slice_max(order_by = unemployment_rate_change, n = 5, with_ties = TRUE)
+
+unemp_top_decreases_no_covid <- unemp_no_covid |>
+  slice_min(order_by = unemployment_rate_change, n = 5, with_ties = TRUE)
+
+```
+
+Table 1: Full-Sample Summary Statistics (January 1976–August 2026) Mean, minimum, and maximum monthly unemployment rate for each region across the entire sample period.
+
+```{R}
+#| echo: false
+kable(
+  unemp_recent_summary,
+  col.names = c("Region", "Mean Rate (%)", "Min Rate (%)", "Max Rate (%)"),
+  digits     = 2,
+  caption    = "Recent-sample summary statistics by region, January 2015–August 2026."
+)
+```
+
+Table 2: Recent-Sample Summary Statistics (January 2015–August 2026) The same summary statistics restricted to the most recent decade, giving a picture of the post-Great-Recession labor market.
+
+```{R}
+#| echo: false
+kable(
+  unemp_recent_summary,
+  col.names = c("Region", "Mean Rate (%)", "Min Rate (%)", "Max Rate (%)"),
+  digits     = 2,
+  caption    = "Recent-sample summary statistics by region, January 2015–August 2026."
+)
+```
+
+Table 3: Five Largest Month-over-Month Increases (Excluding 2020) The five (plus ties) region-month observations with the sharpest single-month rises in the unemployment rate, after removing all 2020 observations to exclude the COVID-19 shock.
+
+```{R}
+#| echo: false
+kable(
+  unemp_top_increases_no_covid |>
+    select(region, date, unemployment_rate, unemployment_rate_change) |>
+    arrange(desc(unemployment_rate_change)),
+  col.names = c("Region", "Date", "Unemployment Rate (%)", "Monthly Change (pp)"),
+  digits     = 2,
+  caption    = "Five largest month-over-month increases in unemployment rate, excluding 2020."
+)
+```
+
+Table 4: Five Largest Month-over-Month Decreases (Excluding 2020) The five (plus ties) region-month observations with the sharpest single-month drops in the unemployment rate, after removing all 2020 observations.
+
+```{R}
+#| echo: false
+kable(
+  unemp_top_decreases_no_covid |>
+    select(region, date, unemployment_rate, unemployment_rate_change) |>
+    arrange(unemployment_rate_change),
+  col.names = c("Region", "Date", "Unemployment Rate (%)", "Monthly Change (pp)"),
+  digits     = 2,
+  caption    = "Five largest month-over-month decreases in unemployment rate, excluding 2020."
+)
+```
+
+## 3. Visualization
+
+The four figures below explore monthly unemployment rate patterns across the United States, Oregon, California, Texas, and New York from January 1976 through August 2026.
+
+5.1. Figure 1: Combined Line Plot — Unemployment Rate by Region
+
+All five series are plotted on a single set of axes, with each region distinguished by color. This allows direct comparison of levels and co-movement across regions over the full sample period. Notable spikes correspond to the early-1980s recession, the 2008–09 Great Recession, and the sharp COVID-19 shock in spring 2020.
+
+```{R}
+#| echo: false
+#| message: false
+#| warning: false
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  labs(
+    title = "Monthly Unemployment Rates by Region (1976–Present)",
+    x     = "Date",
+    y     = "Unemployment Rate (%)",
+    color = "Region"
+  ) +
+  theme_minimal()
+```
+
+5.2. Figure 2: Faceted Line Plots — Unemployment Rate by Region
+
+The same data as Figure 1, now split into one panel per region using \`facet_wrap()\`. Separating the series makes it easier to see each region's individual history without the lines overlapping, while the shared y-axis still permits level comparisons across panels.
+
+```{R}
+#| echo: false
+#| message: false
+#| warning: false
+ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
+  geom_line() +
+  facet_wrap(~ region) +
+  labs(
+    title = "Monthly Unemployment Rates by Region (1976–Present)",
+    x     = "Date",
+    y     = "Unemployment Rate (%)",
+    color = "Region"
+  ) +
+  theme_minimal()
+```
+
+5.3. Figure 3: Bar Chart — Average Unemployment Rate by Region (Full Sample)
+
+Each bar shows the mean monthly unemployment rate for a given region over the entire sample (January 1976–August 2026). Regions are ordered from lowest to highest average rate, making it easy to rank them at a glance. California and New York consistently carry the highest average unemployment, while Texas sits near the bottom.
+
+```{R}
+#| echo: false
+#| message: false
+#| warning: false
+ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), 
+                          y = mean_rate, 
+                          fill = region)) +
+  geom_col() +
+  labs(
+    title = "Average Unemployment Rate by Region (Full Sample)",
+    x     = "Region",
+    y     = "Mean Unemployment Rate (%)",
+    fill  = "Region"
+  ) +
+  theme_minimal()
+```
+
+5.4. Figure 4: Month-over-Month Change in Unemployment Rate by Region
+
+This plot shows the month-over-month change in unemployment rate for each region, shifting focus from the level of unemployment to the speed at which it moves. It is particularly revealing because while the level plots in 5.1 and 5.2 show California as a persistently high-unemployment state, this change plot shows that the COVID-19 shock of spring 2020 dwarfed every other labor market disruption across all regions almost equally. This suggest that the pandemic was a universal, sudden shock rather than one that hit structurally weaker labor markets disproportionately harder.
+
+```{R}
+#| echo: false
+#| message: false
+#| warning: false
+ggplot(unemp, aes(x = date, y = unemployment_rate_change, color = region)) +
+  geom_line(alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  facet_wrap(~ region, scales = "free_x") +
+  scale_x_date(
+    date_breaks = "10 years",
+    date_labels = "%Y"
+  ) +
+  labs(
+    title = "Month-over-Month Change in Unemployment Rate by Region (1976–Present)",
+    x     = "Date",
+    y     = "Change in Unemployment Rate (percentage points)",
+    color = "Region"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## 4. Reflection
+
+I think for me, reading in the data and performing preliminary steps and the \`dplyr\` wrangling in Part 4 was relatively straightforward. The trickiest part was the \`slice_max()\` and \`slice_min()\` step in 4.3, because it was easy to forget that these functions operate on the whole data frame by default rather than within groups, which initially produced unexpected results. Getting \`ggplot2\` to behave exactly as intended — particularly controlling bar ordering with \`fct_reorder()\` and managing axis label readability in the faceted plots also required more trial and error than I anticipated. One thing I feel noticeably more comfortable with now is the Git and GitHub workflow. The discipline of making small, descriptive commits at meaningful checkpoints (rather than one large dump at the end) made it much easier to track my progress as well and gave me confidence.
+
+```{R}
+```

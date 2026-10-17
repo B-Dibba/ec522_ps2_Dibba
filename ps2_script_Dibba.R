@@ -142,4 +142,14 @@ ggplot(unemp, aes(x = date, y = unemployment_rate, color = region)) +
   ) +
   theme_minimal()
 
+#5.3 Produce a Bar Chart
+ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), y = mean_rate, fill = region)) +
+  geom_col() +
+  labs(
+    title = "Average Unemployment Rate by Region (Full Sample)",
+    x     = "Region",
+    y     = "Mean Unemployment Rate (%)",
+    fill  = "Region"
+  ) +
+  theme_minimal()
 

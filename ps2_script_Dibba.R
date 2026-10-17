@@ -153,3 +153,23 @@ ggplot(unemp_summary, aes(x = fct_reorder(region, mean_rate), y = mean_rate, fil
   ) +
   theme_minimal()
 
+#5.4 Your Choice 
+# Month-over-Month Change in Unemployment Rate
+ggplot(unemp, aes(x = date, y = unemployment_rate_change, color = region)) +
+  geom_line(alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  facet_wrap(~ region, scales = "free_x") +  
+  scale_x_date(
+    date_breaks = "10 years",
+    date_labels = "%Y"
+  ) +
+  labs(
+    title = "Month-over-Month Change in Unemployment Rate by Region (1976–Present)",
+    x     = "Date",
+    y     = "Change in Unemployment Rate (percentage points)",
+    color = "Region"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
